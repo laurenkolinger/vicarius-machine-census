@@ -1,0 +1,63 @@
+# ==============================================================================
+# MODULE INTERFACE DEFINITION - Machine Census (two-machine system inventory)
+# ==============================================================================
+# Read-only utility: weekly hardware/software census of every VICARIUS machine
+# (vicar-mainframe + dl), drift report between them, and the generated
+# MACHINE_CONTEXT.md that agents must read before installing anything or
+# authoring a module. Snapshots sync between machines through Synology Drive
+# because the whole module lives inside vicarius_drive.
+# ==============================================================================
+
+name: "machine_census"
+display_name: "Machine Census"           # Lauren, 2026-08-17
+tags: ["utility"]                        # Lauren, 2026-08-17
+hidden: false
+hidden_reason: ""
+version: "1.0.0"
+description: "Weekly read-only inventory of each VICARIUS machine (packages, apps, GPUs, conda/R stacks, dock integration), NAS-synced per-host snapshots, a combined drift report, and the canonical MACHINE_CONTEXT.md that keeps agents installing to the right places on both machines."
+author: "Lauren K Olinger"
+created: "2026-08-17"
+
+type: "aggregate"
+
+# ------------------------------------------------------------------------------
+# INPUTS: none. The collector reads the running system only (dpkg, snap, conda,
+# gsettings, nvidia-smi ...), never the network and never other modules.
+# ------------------------------------------------------------------------------
+inputs: []
+
+# ------------------------------------------------------------------------------
+# OUTPUTS - data-dictionary contract
+# ------------------------------------------------------------------------------
+outputs:
+  - dataset: "machine_census_snapshot"
+    path: "github_repo/data/hosts/<hostname>/latest.json"
+    eml: false
+    notes: "Dated archive copies census_YYYY-MM-DD.json accumulate beside latest.json."
+  - dataset: "machine_census_drift_report"
+    path: "github_repo/data/DRIFT_REPORT.md"
+    eml: false
+  - dataset: "machine_census_context"
+    path: "github_repo/data/MACHINE_CONTEXT.md"
+    eml: false
+    notes: "Referenced from vicarius/CLAUDE.md; agents load it each session."
+
+# ------------------------------------------------------------------------------
+# CLI - headless, no prompts (platform rule). Both entrypoints are direct
+# python scripts; the UI runner form maps 1:1 onto these flags.
+# ------------------------------------------------------------------------------
+cli:
+  entrypoint: "python3 github_repo/collect.py"
+  flag_map:
+    out: "--out"          # hosts dir; default github_repo/data/hosts
+    quiet: "--quiet"
+  post_run: "python3 github_repo/report.py"
+
+schedule:
+  cadence: "weekly"
+  cron: "0 4 * * 0 (vicar-mainframe) / 30 4 * * 0 (all other hosts, staggered to avoid Synology write collisions on the shared report)"
+  installer: "github_repo/install_schedule.sh"
+
+compat:
+  rule: "This module and every other module must run on ALL census hosts or document why not."
+  checker: "github_repo/check_module_compat.py"
